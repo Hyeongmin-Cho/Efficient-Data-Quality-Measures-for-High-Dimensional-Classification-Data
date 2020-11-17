@@ -22,7 +22,6 @@ import pickle
 from tqdm.notebook import tqdm
 from datetime import datetime
 from utils import load_list, save_list, to_arff
-from ops import shift_image
 import PIL
 
 class StratifiedSampler(Sampler):
