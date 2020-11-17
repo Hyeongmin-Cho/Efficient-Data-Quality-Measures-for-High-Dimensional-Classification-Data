@@ -33,7 +33,7 @@ class dataloader:
         else:
             raise Exception("Training argument must be True or False")
 
-        # Load everything in some numpy arrays
+        # Load everything in numpy arrays
         with open(fname_lbl, 'rb') as flbl:
             magic, num = struct.unpack(">II", flbl.read(8))
             lbl = np.fromfile(flbl, dtype=np.int8)
@@ -48,7 +48,7 @@ class dataloader:
         for i in range(len(lbl)):
             yield get_img(i)
     
-    # MNIST, FMNIST Dataset 폴더 path 입력
+    # MNIST, FMNIST Dataset
     def load_mnist(self, path ,training=True):
         print(path)
         data = list(self.mnist_gen(path, training))
@@ -63,7 +63,7 @@ class dataloader:
         return np.array(flatted_pixel_list), np.array(label_list)
     
     
-    #SVHN Dataset 파일명 입력
+    # SVHN Dataset
     def load_svhn(self, path, training=True):
         print(path)
         if training:
@@ -76,6 +76,7 @@ class dataloader:
         
         return data, label
     
+    # notMNIST Dataset
     def load_notMNIST(self, path, training=True):
         print(path)
         notMNIST = datasets.ImageFolder(root=path, transform=transforms.ToTensor())
@@ -93,7 +94,8 @@ class dataloader:
         else:
             return data[num_train:], label[num_train:]
         
-        
+    
+    # Linnaeus Dataset
     def load_linnaeus(self, path, training=True):
         path = os.path.join(path, 'train') if training else os.path.join(path, 'test')
         print(path)
@@ -132,7 +134,7 @@ class dataloader:
 
         return data, label
     
-    
+    # STL10 Dataset
     def load_stl10(self, path, training):
         print(path)
         if training:

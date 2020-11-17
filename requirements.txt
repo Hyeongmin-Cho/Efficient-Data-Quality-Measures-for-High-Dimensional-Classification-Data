@@ -1,0 +1,13 @@
+numpy
+matplotlib
+scikit-learn
+pandas
+smtplib
+seaborn
+ast
+torch
+torchvision
+pillow
+tqdm
+opencv-python
+scikit-image

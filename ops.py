@@ -1,5 +1,6 @@
 import numpy as np
 
+# Deprecated function
 def shift_image(X, dx, dy):
     X = np.roll(X, dy, axis=0)
     X = np.roll(X, dx, axis=1)

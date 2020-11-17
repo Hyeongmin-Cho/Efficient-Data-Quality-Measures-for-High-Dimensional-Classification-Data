@@ -32,9 +32,9 @@ class StratifiedSampler(Sampler):
     """
     
     # self.label_dict : { class : [idx] }
-    # self.class_instance_dict : { class : 데이터 수(밖에서 미리 전처리해서 들어옴, 전체 데이터수가 30개 미만이면 0 등등) }
+    # self.class_instance_dict : { class : # of data (if class data less than 30, then 0) }
     # self.batch_size : batch_sampling_number
-    # self.min_class_data_size : 클래스내 최소 데이터 수
+    # self.min_class_data_size : minimum number of data in a class
     def __init__(self, label_dict, sampling_count, class_instance_dict, batch_size, min_class_data_size):
         self.label_dict = label_dict
         self.class_instance_dict = class_instance_dict
@@ -45,12 +45,11 @@ class StratifiedSampler(Sampler):
     def gen_sample_idx(self):
         sample_idx = []
         
-        # sampling count 수 만큼 iteration을 돔 (300으로 하기로 함)
+        # Iteration (sampling count)
         for _ in range(self.sampling_count):
             tmp_idx = []
             
             for label in self.label_dict.keys():
-                # 클래스의 전체 데이터 수 가 30개 보다 적은 경우는 class_instance_dict에 30개로 들어옴
                 if self.class_instance_dict[label] == 0:
                     continue
                 else:
@@ -70,8 +69,8 @@ class StratifiedSampler(Sampler):
         return len(self.class_vector)
 
 class DatasetQualityEval():
-    # MNIST : 1000 x 784 ( data개수 x flatten features)
-    # numpy array를 input으로 받음.
+    # MNIST : 1000 x 784 ( # of data x flatten features)
+    # Input : numpy array
     def __init__(self, loader, process= 1 ,resize = 1, sample_ratio = 0.3, sampling_count = 2, normal_vector = 10, batch_size = 100, dataset_name = 'NoName', size = (256, 256, 3)):
 
         # data 
@@ -81,13 +80,14 @@ class DatasetQualityEval():
         self.resize = resize
         self.process = process
         
-        # data를 sampling할 비율, 횟수 (bootstrap)
+        # sampling ratio (train data = total # of data * sampling ratio)
+        # sampling count : # of bootstrapping
         self.sample_ratio =  sample_ratio
         self.sampling_count = sampling_count
         
         self.dset_name = dataset_name
         
-        # (data 개수 x data 차원)을 입력받는 가정. (image를 가로로 늘린 데이터)
+        # flatten data dimension
         self.data_dim = size[0] * size[1] * size[2]
         
         # coherence (LDA)
@@ -122,24 +122,26 @@ class DatasetQualityEval():
         S_B_list = []
         S_W_list = []
         LDA_list = []
+        # calculate # of class data (count) and class sum (add)
         for idx in range(sampled_Y_data.shape[0]):
             label = sampled_Y_data[idx]
             count[label] = 1 if label not in list(count.keys()) else count[label] + 1
             add[label] = sampled_X_data[idx] if label not in list(add.keys()) else add[label] + sampled_X_data[idx]
 
+        # calculate each class mean (X bar i) and global mean (X bar)
         each_class_mean = {each_class : (add[each_class]/count[each_class]).reshape(self.data_dim, 1) for each_class in list(add.keys())}
         global_mean = np.mean(sampled_X_data, axis=0).reshape(self.data_dim, 1)
         
         gaussian_vec = np.random.normal(0, 1, (self.normal_vec_num, self.data_dim))
         max_lda, max_s_b, max_s_w, max_gaussian = 0, 0, 0, 0
         
-        # matrix로 안하는게 좋을듯. 
-        # (# class x data_dim) matrix 만들다가 memory 터질수도 있음.
-        # class 하나씩 계산하는게 나을듯.
+        # Matrix computation is inefficient
+        # (# class x data_dim) -->  matrix memory issue
+        # compute each class, not at once
         for one_gaussian_vec in gaussian_vec:
             S_B = 0
             S_W = 0
-            # Random projection 할 때 projection vector는 unit vector
+            # projection vector is unit vector
             one_gaussian_vec = one_gaussian_vec / np.linalg.norm(one_gaussian_vec)
             
             self.random_vector_list.append(one_gaussian_vec)
@@ -147,21 +149,20 @@ class DatasetQualityEval():
             for label, mean_vec in each_class_mean.items():
                 n = count[label]
                 
-                # between class 
+                # between class with normalization
                 between_class = (n / sampled_Y_data.shape[0]) * np.matmul(one_gaussian_vec.T, (mean_vec - global_mean)) * np.matmul((mean_vec - global_mean).T , one_gaussian_vec)
-                between_class /= self.data_dim
                 S_B_variance[label] = between_class / self.normal_vec_num if label not in S_B_variance.keys() else S_B_variance[label] + (between_class / self.normal_vec_num)
 
-                # within class
+                # within class with normalization
                 label_instance = sampled_X_data[np.where(sampled_Y_data == label)]
                 within_class = np.matmul( np.matmul(one_gaussian_vec.T , (label_instance - mean_vec.T).T), np.matmul( (label_instance - mean_vec.T), one_gaussian_vec)) / n
-                within_class /= self.data_dim
+            
                 S_W_variance[label] = within_class / self.normal_vec_num if label not in S_W_variance.keys() else S_W_variance[label] + (within_class / self.normal_vec_num) 
                 
                 S_W += abs(within_class)
                 S_B += abs(between_class)
             
-            # S_w, S_b, lda 저장
+            # save --> S_w, S_b, lda
             S_W /= len(each_class_mean.items())
             S_B /= len(each_class_mean.items())
             
@@ -171,6 +172,7 @@ class DatasetQualityEval():
             LDA_list.append(lda.item())
             
             dtime = datetime.fromtimestamp(time.time())
+            # save log files
             f_sb = open('./log/%s_resize%d_ratio%f_count%d_gvn%d_SB_log.txt'%(self.dset_name, self.resize, self.sample_ratio, self.sampling_count, self.normal_vec_num), mode='a+', encoding='utf-8')
             f_sw = open('./log/%s_resize%d_ratio%f_count%d_gvn%d_SW_log.txt'%(self.dset_name, self.resize, self.sample_ratio, self.sampling_count, self.normal_vec_num), mode='a+', encoding='utf-8')
             f_lda = open('./log/%s_resize%d_ratio%f_count%d_gvn%d_lda_log.txt'%(self.dset_name, self.resize, self.sample_ratio, self.sampling_count, self.normal_vec_num), mode='a+', encoding='utf-8')
@@ -181,6 +183,7 @@ class DatasetQualityEval():
             f_sw.close()
             f_lda.close()
             
+            # update max lda
             if lda > max_lda:
                 max_lda = lda
                 max_s_b = S_B
@@ -213,12 +216,14 @@ class DatasetQualityEval():
             self.max_LDA_list.append(np.max(LDA))
             iter_end_time = time.time()
         
+        # Bootstrapping statistic
         self.coherence_result = np.mean(self.max_LDA_list)
         
         
         end_time = time.time()
         elapsed_time = end_time-start_time
         
+        # Save summarized results
         print("\nSample ratio: %.2f, Sampling count: %d" %(self.sample_ratio, self.sampling_count))
         print("Data coherence:", self.coherence_result)
         print("Computing time: %d hour %d min %d sec (%.3f)\n" % (elapsed_time/3600, (elapsed_time%3600)/60, elapsed_time%60, elapsed_time))
@@ -233,7 +238,8 @@ class DatasetQualityEval():
         f.close()
         
         return self.coherence_result
-        
+    
+    # deprecated function
     def between_class_mean(self):
         class_labels = list(set(j  for i in self.S_B_variance_list for j in i.keys()))
         class_count = {}
@@ -248,6 +254,7 @@ class DatasetQualityEval():
         return self.between_vect_mean    
     
 
+# Data loader
 def load_data(root, dataset_name, is_training):
     dataset_path = os.path.join(root, dataset_name)
 
@@ -294,8 +301,10 @@ def load_data(root, dataset_name, is_training):
     
     return data, label, size
 
+
 def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_count=100, normal_vector=10, min_sampling_num=30 ,num_workers=1, process=1, resize=1):
-    np.random.seed(2)
+    # fix seed
+    np.random.seed(2) 
     data, label, size = load_data(root, dataset_name, is_training)
     print('Loading dataset', dataset_name, '...')
     print('Data min :', data.min())
@@ -307,11 +316,13 @@ def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_cou
     print('Sampling count :', sampling_count)
     print('Num normal vector :', normal_vector)
     
+    # calcuate batch size
     standard_batch_size = int(data.shape[0] * sample_ratio)
 
 
     print('Standard batch size :', standard_batch_size)
 
+    # calculate # of class
     unique_label = list(set(label))
 
     label_count_dict = {key : 0 for key in unique_label}
@@ -323,12 +334,11 @@ def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_cou
         label_idx_dict[l].append(idx)
         
     # standard_batch_size : batch size
-    # label_idx_dict : 클래스 라벨의 index dictionary
-    # label_count_dict : 클래스 별 데이터 수
-    # label_stratified_sampling_num : batch 들어갈 각 클래스 데이터 수 dictionary
-    # batch_sampling_num : 총 샘플링될 데이터 수
-    # 반복 횟수 : 300 고정
-    # min_sampling_num : 최소 샘플링 개수
+    # label_idx_dict : index dictionary of class label
+    # label_count_dict : # of data in each class
+    # label_stratified_sampling_num : Dictionary of # of class data into the batch
+    # batch_sampling_num : Toal # of data to be sampled
+    # min_sampling_num : minimum sampling #, No statistical significance below 30
 
     label_stratified_sampling_num = {}
     batch_sampling_num = 0
@@ -337,24 +347,25 @@ def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_cou
     for key, val in label_count_dict.items():
         label_stratified_sampling_num[key] = round(val / total_data_num * standard_batch_size)
 
-        # 클래스 내 데이터 수가 최소 샘플링 개수보다 적을경우 복원추출
+        # Sampling with replacement when the number of data in the class is less than the minimum number of samples
         if label_stratified_sampling_num[key] < min_sampling_num :
             label_stratified_sampling_num[key] = min_sampling_num
 
         batch_sampling_num += label_stratified_sampling_num[key]
 
-
-
     print('Batch sampling num :', batch_sampling_num)
 
+    # Define StratifiedSampler
     sampler = StratifiedSampler(label_dict=label_idx_dict, sampling_count = sampling_count, class_instance_dict = label_stratified_sampling_num,
                                     batch_size = batch_sampling_num, min_class_data_size = min_sampling_num)
 
     dset = TensorDataset(torch.Tensor(data), torch.Tensor(label))
     del data, label
 
+    # Define dataloader from pytorch DataLoader
     loader = DataLoader(dset, batch_size=batch_sampling_num, shuffle=False, num_workers=num_workers, sampler=sampler)
     
+    # Define python object for Dataquality measure
     indicator = DatasetQualityEval(loader, process=process, resize=resize, sample_ratio=sample_ratio, \
                                sampling_count=sampling_count, normal_vector=normal_vector, \
                                batch_size=loader.batch_size, dataset_name=dataset_name, \
