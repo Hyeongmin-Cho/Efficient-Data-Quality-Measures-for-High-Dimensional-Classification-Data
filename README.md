@@ -1,5 +1,5 @@
 # Efficient-Data-Qaulity-Measures-for-High-Dimensional-Classification-Datasets
-Implementation of Data quality measure using Fisher's Linear Discriminant Analysis.
+Implementation of data quality measure using Fisher's Linear Discriminant Analysis.
 
 ## Data
 - Dictionary tree
