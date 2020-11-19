@@ -11,6 +11,7 @@ Project
   |    |--- mnist
   |    |--- cifar10
   |    |--- STL10
+  |    |--- ...
   |
   |--- c_measure.py
   |--- ...
