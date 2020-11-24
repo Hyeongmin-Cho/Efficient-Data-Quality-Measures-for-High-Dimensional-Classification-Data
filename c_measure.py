@@ -155,8 +155,12 @@ class DatasetQualityEval():
                 # within class with normalization
                 label_instance = sampled_X_data[np.where(sampled_Y_data == label)]
                 within_class = np.matmul( np.matmul(one_gaussian_vec.T , (label_instance - mean_vec.T).T), np.matmul( (label_instance - mean_vec.T), one_gaussian_vec)) / n
-            
-                S_W_variance[label] = within_class / self.normal_vec_num if label not in S_W_variance.keys() else S_W_variance[label] + (within_class / self.normal_vec_num) 
+                
+                # Save SW values (v S_hat v^T) for the calculation of M_var
+                if label not in S_W_variance.keys():
+                    S_W_variance[label] = [within_class / self.normal_vec_num]
+                else:
+                    S_W_variance[label].append(within_class / self.normal_vec_num)
                 
                 S_W += abs(within_class)
                 S_B += abs(between_class)
