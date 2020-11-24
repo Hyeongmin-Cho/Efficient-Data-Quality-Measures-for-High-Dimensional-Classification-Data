@@ -156,7 +156,7 @@ class DatasetQualityEval():
                 label_instance = sampled_X_data[np.where(sampled_Y_data == label)]
                 within_class = np.matmul( np.matmul(one_gaussian_vec.T , (label_instance - mean_vec.T).T), np.matmul( (label_instance - mean_vec.T), one_gaussian_vec)) / n
                 
-                # Save SW values (v S_hat v^T) for the calculation of M_var
+                # Save SW values (v S_w_hat v^T) for the calculation of M_var
                 if label not in S_W_variance.keys():
                     S_W_variance[label] = [within_class / self.normal_vec_num]
                 else:
