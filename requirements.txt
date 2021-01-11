@@ -4,6 +4,5 @@ scikit-learn
 torch
 torchvision
 tqdm
-opencv-python
 scikit-image
 argparse
