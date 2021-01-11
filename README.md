@@ -1,5 +1,5 @@
 # Efficient-Data-Qaulity-Measures-for-High-Dimensional-Classification-Data
-Implementation of data quality measure using Fisher's Linear Discriminant Analysis.
+Implementation of ["Data Quality Measures and Efficient Evaluation Algorithms for Large-Scale High-Dimensional Data"](https://www.mdpi.com/2076-3417/11/2/472/html).
 
 ## Directory tree
   - dataset : Dataset folder
@@ -17,7 +17,7 @@ Project
   
 ```
 
-## Requirement
+## Requirements
 - numpy
 - matplotlib
 - scikit-learn
@@ -26,3 +26,14 @@ Project
 - tqdm
 - scikit-image
 - argparse
+
+### Install requirements
+```python
+pip3 install -r requirements.txt
+```
+
+## Run code
+### Example
+```python
+python3 run.py --dataset_name=cifar10 --root=dataset --ratio=0.25 --sampling_count=100 --vec=10
+```
