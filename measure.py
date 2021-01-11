@@ -1,32 +1,21 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import random
 import time
 import os
 from sklearn.preprocessing import StandardScaler
-from sklearn import preprocessing
-import pandas as pd
-import sys
-import smtplib
-
-import math
-import multiprocessing as mp
-import matplotlib.pyplot as plt
-import seaborn as sns
-import ast
 import dataset
 import torch
 from torch.utils.data import Dataset, DataLoader, Sampler, TensorDataset
 from torchvision import datasets, transforms
 import pickle
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from datetime import datetime
 from utils import load_list, save_list, to_arff
 import PIL
+from torchvision.datasets import ImageFolder
+from torchvision.datasets import SVHN
 
 class StratifiedSampler(Sampler):
     """Stratified Sampling
-
     Provides equal representation of target classes in each batch
     """
     
@@ -68,6 +57,7 @@ class StratifiedSampler(Sampler):
         return len(self.class_vector)
 
 class DatasetQualityEval():
+    # Example
     # MNIST : 1000 x 784 ( # of data x flatten features)
     # Input : numpy array
     def __init__(self, loader, process= 1 ,resize = 1, sample_ratio = 0.3, sampling_count = 2, normal_vector = 10, batch_size = 100, dataset_name = 'NoName', size = (256, 256, 3)):
@@ -99,12 +89,14 @@ class DatasetQualityEval():
         
         self.LDA_list = []
         self.max_LDA_list = []
+        self.min_SW_list = []
         self.SB_list = []
         self.SW_list = []
         self.S_B_variance_list = []
         self.S_W_variance_list = []
         self.batch_size = batch_size
         self.random_vector_list = []
+        self.max_random_vector_list = []
         
         
     def cal_lda(self, sampled_X_data, sampled_Y_data):
@@ -121,51 +113,55 @@ class DatasetQualityEval():
         S_B_list = []
         S_W_list = []
         LDA_list = []
+        rv_list = []
+        
         # calculate # of class data (count) and class sum (add)
         for idx in range(sampled_Y_data.shape[0]):
             label = sampled_Y_data[idx]
             count[label] = 1 if label not in list(count.keys()) else count[label] + 1
             add[label] = sampled_X_data[idx] if label not in list(add.keys()) else add[label] + sampled_X_data[idx]
-
+        
         # calculate each class mean (X bar i) and global mean (X bar)
         each_class_mean = {each_class : (add[each_class]/count[each_class]).reshape(self.data_dim, 1) for each_class in list(add.keys())}
         global_mean = np.mean(sampled_X_data, axis=0).reshape(self.data_dim, 1)
         
         gaussian_vec = np.random.normal(0, 1, (self.normal_vec_num, self.data_dim))
-        max_lda, max_s_b, max_s_w, max_gaussian = 0, 0, 0, 0
+        max_lda, min_sw, max_gaussian = -99999, 999999, -99999
         
-        # Matrix computation is inefficient
         # (# class x data_dim) -->  matrix memory issue
         # compute each class, not at once
         for one_gaussian_vec in gaussian_vec:
             S_B = 0
             S_W = 0
+            
             # projection vector is unit vector
             one_gaussian_vec = one_gaussian_vec / np.linalg.norm(one_gaussian_vec)
             
             self.random_vector_list.append(one_gaussian_vec)
+            rv_list.append(one_gaussian_vec)
             
             for label, mean_vec in each_class_mean.items():
                 n = count[label]
                 
                 # between class with normalization
                 between_class = (n / sampled_Y_data.shape[0]) * np.matmul(one_gaussian_vec.T, (mean_vec - global_mean)) * np.matmul((mean_vec - global_mean).T , one_gaussian_vec)
+                between_class /= self.data_dim
                 S_B_variance[label] = between_class / self.normal_vec_num if label not in S_B_variance.keys() else S_B_variance[label] + (between_class / self.normal_vec_num)
 
                 # within class with normalization
                 label_instance = sampled_X_data[np.where(sampled_Y_data == label)]
                 within_class = np.matmul( np.matmul(one_gaussian_vec.T , (label_instance - mean_vec.T).T), np.matmul( (label_instance - mean_vec.T), one_gaussian_vec)) / n
-                
-                # Save SW values (v S_w_hat v^T) for the calculation of M_var
+                within_class /= self.data_dim
+
                 if label not in S_W_variance.keys():
-                    S_W_variance[label] = [within_class / self.normal_vec_num]
+                    S_W_variance[label] = [within_class]
                 else:
-                    S_W_variance[label].append(within_class / self.normal_vec_num)
-                
-                S_W += abs(within_class)
-                S_B += abs(between_class)
+                    S_W_variance[label].append(within_class)
+
+                S_W += within_class
+                S_B += between_class
             
-            # save --> S_w, S_b, lda
+            # save S_w, S_b, lda
             S_W /= len(each_class_mean.items())
             S_B /= len(each_class_mean.items())
             
@@ -175,7 +171,11 @@ class DatasetQualityEval():
             LDA_list.append(lda.item())
             
             dtime = datetime.fromtimestamp(time.time())
-            # save log files
+            
+            # logging
+            if not os.path.isdir('./log'):                                                           
+                os.mkdir('./log')
+                
             f_sb = open('./log/%s_resize%d_ratio%f_count%d_gvn%d_SB_log.txt'%(self.dset_name, self.resize, self.sample_ratio, self.sampling_count, self.normal_vec_num), mode='a+', encoding='utf-8')
             f_sw = open('./log/%s_resize%d_ratio%f_count%d_gvn%d_SW_log.txt'%(self.dset_name, self.resize, self.sample_ratio, self.sampling_count, self.normal_vec_num), mode='a+', encoding='utf-8')
             f_lda = open('./log/%s_resize%d_ratio%f_count%d_gvn%d_lda_log.txt'%(self.dset_name, self.resize, self.sample_ratio, self.sampling_count, self.normal_vec_num), mode='a+', encoding='utf-8')
@@ -186,12 +186,14 @@ class DatasetQualityEval():
             f_sw.close()
             f_lda.close()
             
-            # update max lda
-            if lda > max_lda:
+            # Updates a max lda value and corresponding projection vector
+            if lda >= max_lda:
                 max_lda = lda
-                max_s_b = S_B
-                max_s_w = S_W
-                max_gaussian = one_gaussian_vec
+                self.max_gaussian = one_gaussian_vec
+            
+            # Updates min SW value
+            if min_sw <= S_W:
+                min_sw = S_W
 
         
         f_sb_variance = open('./log/%s_resize%d_ratio%f_count%d_gvn%d_SB_variance.txt'%(self.dset_name, self.resize, self.sample_ratio, self.sampling_count, self.normal_vec_num), mode='a+', encoding='utf-8')
@@ -199,7 +201,7 @@ class DatasetQualityEval():
         f_sb_variance.close()
         
         
-        return S_B_variance, S_W_variance, S_W_list, S_B_list, LDA_list
+        return S_B_variance, S_W_variance, S_W_list, S_B_list, rv_list, LDA_list
     
     
     def coherence(self, normal_vec_num = 100):
@@ -210,17 +212,20 @@ class DatasetQualityEval():
             iter_start_time = time.time()
             data = np.array(data).reshape(self.batch_size, -1)
             label = np.array(label)
-            S_B_variance, S_W_variance, SW, SB, LDA = self.cal_lda(data, label)
+            S_B_variance, S_W_variance, SW, SB, rv_list, LDA = self.cal_lda(data, label)
             self.S_B_variance_list.append(S_B_variance)
             self.S_W_variance_list.append(S_W_variance)
             self.SW_list.extend(SW)
             self.SB_list.extend(SB)
             self.LDA_list.extend(LDA)
             self.max_LDA_list.append(np.max(LDA))
+            self.min_SW_list.append(np.min(SW))
+            self.max_random_vector_list.append(np.array(rv_list)[np.array(LDA).argsort()[-3:][::-1]])
             iter_end_time = time.time()
         
         # Bootstrapping statistic
         self.coherence_result = np.mean(self.max_LDA_list)
+        self.minimum_SW = np.mean(self.min_SW_list)
         
         
         end_time = time.time()
@@ -240,7 +245,8 @@ class DatasetQualityEval():
         f.write("Computing time: %d hour %d min %d sec (%.3f)\n" % (elapsed_time/3600, (elapsed_time%3600)/60, elapsed_time%60, elapsed_time))
         f.close()
         
-        return self.coherence_result
+        return self.coherence_result, self.minimum_SW
+    
     
     # deprecated function
     def between_class_mean(self):
@@ -260,7 +266,7 @@ class DatasetQualityEval():
 # Data loader
 def load_data(root, dataset_name, is_training):
     dataset_path = os.path.join(root, dataset_name)
-
+    print('Loading:', dataset_name)
     load = dataset.dataloader()
     if dataset_name == 'mnist':
         data, label = load.load_mnist(dataset_path, training=is_training)
@@ -271,27 +277,37 @@ def load_data(root, dataset_name, is_training):
         data = data / 255
         size = (32, 32, 3)
     elif dataset_name == 'notMNIST':
-        data, label = load.load_notMNIST(dataset_path, training=is_training)
+        data = load_list('./dataset/notMNIST_data.pkl')
+        label = load_list('./dataset/notMNIST_label.pkl')
         size = (28, 28, 3)
     elif dataset_name == 'stl10':
-        data = []
-        label = []
-        train_loader = load.load_stl10(dataset_path, training=True)
-        test_loader = load.load_stl10(dataset_path, training=False)
-
-        for i in tqdm(range(len(train_loader))):
-            data.append(np.array(train_loader[i][0]))
-            label.append(train_loader[i][1])
-
-        for i in tqdm(range(len(test_loader))):
-            data.append(np.array(test_loader[i][0]))
-            label.append(test_loader[i][1])
-
         size = (32, 32, 3)
-        data = np.array(data)
-        label = np.array(label)
+        data = load_list('./dataset/stl10_data.pkl')
+        label = load_list('./dataset/stl10_label.pkl')
         data = data / 255
         print(data.shape, label.shape)
+    elif dataset_name == 'svhn':
+        data, label = load.load_svhn(root, training=is_training)
+        size = (32, 32, 3)
+    elif dataset_name == 'caltech256':
+        data, label = load.load_caltech256()
+        idx = np.arange(data.shape[0])
+        np.random.shuffle(idx)
+        data = data[idx]
+        label = label[idx]
+        size = (32, 32, 3)
+    elif dataset_name == 'imagenet_1':
+        data, label = load.load_imagenet32(types=1)
+        size = (32, 32, 3)
+    elif dataset_name == 'imagenet_2':
+        data, label = load.load_imagenet32(types=2)
+        size = (32, 32, 3)
+    elif dataset_name == 'imagenet_3':
+        data, label = load.load_imagenet32(types=3)
+        size = (32, 32, 3)
+    elif dataset_name == 'imagenet_4':
+        data, label = load.load_imagenet32(types=4)
+        size = (32, 32, 3)
     else:
         data, label = load.load_linnaeus(dataset_path, training=is_training)
         size = (32, 32, 3)
@@ -304,11 +320,11 @@ def load_data(root, dataset_name, is_training):
     
     return data, label, size
 
-
-def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_count=100, normal_vector=10, min_sampling_num=30 ,num_workers=1, process=1, resize=1):
+def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_count=100, normal_vector=10, min_sampling_num=30 ,num_workers=1, process=1, resize=1, classes=None):
     # fix seed
-    np.random.seed(2) 
+    np.random.seed(2)
     data, label, size = load_data(root, dataset_name, is_training)
+    
     print('Loading dataset', dataset_name, '...')
     print('Data min :', data.min())
     print('Data max :', data.max())
@@ -324,7 +340,7 @@ def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_cou
 
 
     print('Standard batch size :', standard_batch_size)
-
+    
     # calculate # of class
     unique_label = list(set(label))
 
@@ -356,15 +372,17 @@ def get_lda_object(root, dataset_name, is_training, sample_ratio=1, sampling_cou
 
         batch_sampling_num += label_stratified_sampling_num[key]
 
-    print('Batch sampling num :', batch_sampling_num)
 
+
+    print('Batch sampling num :', batch_sampling_num)
+    
     # Define StratifiedSampler
     sampler = StratifiedSampler(label_dict=label_idx_dict, sampling_count = sampling_count, class_instance_dict = label_stratified_sampling_num,
                                     batch_size = batch_sampling_num, min_class_data_size = min_sampling_num)
 
     dset = TensorDataset(torch.Tensor(data), torch.Tensor(label))
     del data, label
-
+    
     # Define dataloader from pytorch DataLoader
     loader = DataLoader(dset, batch_size=batch_sampling_num, shuffle=False, num_workers=num_workers, sampler=sampler)
     

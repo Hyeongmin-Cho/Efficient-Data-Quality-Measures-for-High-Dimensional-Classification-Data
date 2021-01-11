@@ -1,23 +1,14 @@
-import matplotlib.pyplot as plt
 import os
 import numpy as np
 import pickle
-import glob
-import json
-from PIL import Image
-import struct
-from skimage.transform import resize
 from torchvision import datasets, transforms
-import cv2
 from tqdm import tqdm, trange
 import torch
 from torch.utils.data import DataLoader, TensorDataset, Dataset
 from torchvision import datasets, transforms
-import multiprocessing
-from functools import partial
-import os
-import pandas as pd
 from utils import load_list, save_list, unpickle
+from torchvision.datasets import ImageFolder
+from torchvision.datasets import SVHN
 
 class dataloader:
     def __init__(self):
@@ -33,7 +24,7 @@ class dataloader:
         else:
             raise Exception("Training argument must be True or False")
 
-        # Load everything in numpy arrays
+        # Load everything in some numpy arrays
         with open(fname_lbl, 'rb') as flbl:
             magic, num = struct.unpack(">II", flbl.read(8))
             lbl = np.fromfile(flbl, dtype=np.int8)
@@ -62,19 +53,42 @@ class dataloader:
 
         return np.array(flatted_pixel_list), np.array(label_list)
     
-    
     # SVHN Dataset
-    def load_svhn(self, path, training=True):
-        print(path)
+    def load_svhn(self, dataset_path, training=True):
+        transform = transforms.Compose([
+            transforms.ToTensor(), 
+        ])
         if training:
-            svhn = datasets.SVHN(path, split='train')
+            train_dataset = SVHN(dataset_path, split='train' ,transform=transform, download=True)
         else:
-            svhn = datasets.SVHN(path, split='test')
-            
-        data = svhn.data
-        label = svhn.labels
-        
-        return data, label
+            train_dataset = SVHN(dataset_path, split='test' ,transform=transform, download=True)
+        train_loader = DataLoader(dataset=train_dataset, batch_size=100, shuffle=False, drop_last=True)
+        data = []
+        target = []
+
+        for X, y in train_loader:
+            data.append(X.numpy())
+            target.append(y.numpy())
+
+        return np.array(data).reshape(-1, 3, 32, 32), np.array(target).reshape(-1)
+    
+    # Caltech256 dataset
+    def load_caltech256(self):
+        data = load_list('./dataset/caltech256_data_resized32.pkl')
+        target = load_list('./dataset/caltech256_target.pkl')
+
+        return data, target
+    
+    # Tiny ImageNet Dataset
+    def load_imagenet32(self, types=1):
+        data = []
+        target = []
+
+        print('Imagenet type%d 10 class dataset loading..'%types)
+        data = np.array(load_list('./dataset/tiny_imagenet_type%d_data.pkl'%types))
+        target = np.array(load_list('./dataset/tiny_imagenet_type%d_label.pkl'%types))
+
+        return data, target
     
     # notMNIST Dataset
     def load_notMNIST(self, path, training=True):
@@ -94,8 +108,7 @@ class dataloader:
         else:
             return data[num_train:], label[num_train:]
         
-    
-    # Linnaeus Dataset
+    # Linnaeus Dataset 
     def load_linnaeus(self, path, training=True):
         path = os.path.join(path, 'train') if training else os.path.join(path, 'test')
         print(path)
@@ -141,8 +154,5 @@ class dataloader:
             stl10_dataset = datasets.STL10(path, split='train',transform=transforms.Resize(32))
         else:
             stl10_dataset = datasets.STL10(path, split='test',transform=transforms.Resize(32))
-        
-#         data = stl10_dataset.data
-#         label = stl10_dataset.labels
         
         return stl10_dataset
