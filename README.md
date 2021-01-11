@@ -1,8 +1,7 @@
 # Efficient-Data-Qaulity-Measures-for-High-Dimensional-Classification-Data
 Implementation of data quality measure using Fisher's Linear Discriminant Analysis.
 
-## Data
-- Dictionary tree
+## Directory tree
   - dataset : Dataset folder
 
 ```
@@ -13,7 +12,7 @@ Project
   |    |--- STL10
   |    |--- ...
   |
-  |--- c_measure.py
+  |--- measure.py
   |--- ...
   
 ```
@@ -22,13 +21,8 @@ Project
 - numpy
 - matplotlib
 - scikit-learn
-- pandas
-- smtplib
-- seaborn
-- ast
 - torch
 - torchvision
-- pillow
 - tqdm
-- opencv-python
 - scikit-image
+- argparse
