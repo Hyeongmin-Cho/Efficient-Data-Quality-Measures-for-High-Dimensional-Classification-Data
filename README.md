@@ -1,4 +1,4 @@
-# Efficient-Data-Qaulity-Measures-for-High-Dimensional-Classification-Data
+# Efficient-Data-Quality-Measures-for-High-Dimensional-Classification-Data
 Implementation of ["Data Quality Measures and Efficient Evaluation Algorithms for Large-Scale High-Dimensional Data"](https://www.mdpi.com/2076-3417/11/2/472/html).
 
 ## Directory tree
